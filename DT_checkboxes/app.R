@@ -1,5 +1,35 @@
 library(DT)
+library(shinyalert)
 library(shiny)
+
+
+filter_mask <- function( layout_in, original_mask, mask_table, keep_or_drop = "drop") {
+    
+    if (keep_or_drop == "drop") {
+        vars <- names(layout_in)[names(layout_in) %in% names(mask_table)] 
+        filt_layout <- layout_in 
+        
+        for (x in c(1:length(vars)) ) {
+            filt_layout <-  filt_layout %>% 
+                filter(.data[[vars[[x]]]] %in% mask_table[[vars[[x]]]]) }
+        
+    } else if (keep_or_drop == "keep") {
+        
+        original_mask[!is.na(mask_table)] <- NA # invert the selection table
+        keep_mask <- original_mask %>%  discard(~all(is.na(.))) # drop the unmodified columns
+        
+        vars <- names(layout_in)[names(layout_in) %in% names(keep_mask)] 
+        filt_layout <- layout_in 
+        
+        for (x in c(1:length(vars)) ) {
+            filt_layout <-  filt_layout %>% 
+                filter(.data[[vars[[x]]]] %in% keep_mask[[vars[[x]]]]) 
+        }
+    }
+    
+    
+    filt_layout
+}
 
 # new daughter layout function
 df_to_layout <- function(df, layout_type) {
@@ -59,44 +89,74 @@ make_layout_table <- function( layout_df ) {
     names(var_list_len) <- col_names
     
     var_list_len %>% as_tibble()
-    
 }
 
 ui <- shinyUI(
 
-    fluidRow(    
-        tags$style(HTML('table.dataTable tr.selected td, table.dataTable td.selected {background-color: pink !important;}')),
+    fluidRow(useShinyalert(),    
+        tags$style(HTML('table.dataTable tr.selected td, table.dataTable td.selected {background-color: #addd8e !important;}')),
+
+        actionButton("drop_vars", "Remove selected variables from plot"),
+        actionButton("keep_these_vars", "Plot only selected variables"),
+        
         DT::dataTableOutput("myDatatable"),
-        DT::dataTableOutput("selectedCells"),
-        verbatimTextOutput("selectedCells_print"),
-        plotOutput("plot")
+        DT::dataTableOutput("selectedCells")
     )
 )
 
 server <- shinyServer(function(input, output, session) {
-    layout_in <- make_layout("sample_daughter_layout.csv") %>%
-        select(-c(row, column, well, condition)) %>%
-        make_layout_table()
+
+    layout_in <- reactive(make_layout("sample_daughter_layout.csv") %>%
+                            select(-c(row, column, well, condition)) %>%
+                            make_layout_table())
+    
+    layout_raw <- reactive(make_layout("sample_daughter_layout.csv") )
             
 
-    output$myDatatable <- DT::renderDataTable( layout_in,
+    output$myDatatable <- DT::renderDataTable( layout_in(),
                                               selection= list(mode="multiple", target="cell"),
                                               server = FALSE,
-                                              rownames=FALSE)
+                                              rownames = FALSE,
+                                              options = list(scrollX = TRUE, scrollY = 250, scrollCollapse = TRUE, paging = FALSE, dom = 't'))
+    
 
-    output$selectedCells <- DT::renderDataTable({
+    drop_var <- 0
+    keep_var <- 0
+    
+    chosen_vars <- eventReactive( {input$keep_these_vars |  input$drop_vars}, {
+        
         req(input$myDatatable_cells_selected)
-
-        #input$myDatatable_cells_selected
-        mt_edit <-  layout_in 
+        
+        mt_edit <-  layout_in() # why isn't this reactive?
         for (row in c(1:nrow(input$myDatatable_cells_selected))) {
-            print(row)
-            print(input$myDatatable_cells_selected[row,])
-            mt_edit[input$myDatatable_cells_selected[row,1],  unique(input$myDatatable_cells_selected[row,2]+1 )] <- NA
-            
+            mt_edit[input$myDatatable_cells_selected[row,1],  unique(input$myDatatable_cells_selected[row,2]+1 )] <- NA }
+        
+        if (drop_var != input$drop_vars %>% as.numeric()) {
+            out <- filter_mask( layout_raw(), original_mask = layout_in(),  mt_edit, keep_or_drop = "drop") 
+
+        } else if (keep_var != input$keep_these_vars %>% as.numeric()) {
+            out <- filter_mask( layout_raw(), original_mask = layout_in(),  mt_edit, keep_or_drop = "keep") 
         }
-        mt_edit
+        
+        # update the button counters
+        drop_var <<- input$drop_vars %>% as.numeric()
+        keep_var <<- input$keep_these_vars %>% as.numeric()
+
+        if ( nrow(out) < 1 ) {
+            print("alerts!!")
+            shinyalert("No data matches the selection criteria!", "Please update your selections and try again.")
+            out <- layout_raw()
+        }
+        
+        out
+        
        })
+    
+   
+    output$selectedCells <- DT::renderDataTable({
+        chosen_vars()
+    })
+    
 
     output$selectedCells_print <- renderPrint(
         input$myDatatable_cells_selected

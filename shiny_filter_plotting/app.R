@@ -9,15 +9,17 @@
 library(tidyverse)
 library(shiny)
 
+#### this can be done using heirarchical drill-downs, as shown in Mastering Shiny
+# https://mastering-shiny.org/action-dynamic.html
+# 10.1.2 Hierarchical select boxes
+#### See live at https://hadley.shinyapps.io/ms-update-nested.
+
 # Define UI for application that draws a histogram
 ui <- fluidPage(
-    selectInput("dataset", "Dataset", names(mtcars), selected = names(mtcars)[1]),
-    uiOutput("dataset2"),
-
-    conditionalPanel( condition = "output.nrows",
-                      selectInput("dataset2", "Dataset2", "dataset2")),
-    
- dataTableOutput("dynamic")
+    selectInput("territory", "Territory", choices = unique(sales$TERRITORY)),
+    selectInput("customername", "Customer", choices = NULL),
+    selectInput("ordernumber", "Order number", choices = NULL),
+    tableOutput("data")
 )
 
 server <- function(input, output, session) {

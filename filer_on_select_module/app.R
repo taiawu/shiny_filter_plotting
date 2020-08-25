@@ -6,29 +6,33 @@ library(shiny)
 
 ## https://mastering-shiny.org/scaling-modules.html#case-studies
 
-ui <- fluidPage(useShinyalert(), 
+ui <- fluidPage(useShinyalert(), # modules have alerts if all data is filtered out
                 sidebarLayout(
                     sidebarPanel(
                         bsCollapse(id = "file_parse_types", open = "Panel 1",
                                    bsCollapsePanel("Select data to plot",
-                                                   selectVariablesTableUI(id = "selection_table1"),
+                                                   
+                                                   selectVariablesTableUI(id = "selection_table1"), # first instance of the module UI
+                                                   
                                                    DT::dataTableOutput("selectedCells") 
                                                    ),
                                    bsCollapsePanel("Select data to fit",
+                                                   
                                                    selectVariablesTableUI(id = "selection_table2",
                                                                           drop_button_name = "Do not fit selected conditions", 
-                                                                          keep_button_name = "Fit only selected conditions"),
+                                                                          keep_button_name = "Fit only selected conditions"),  # second instance of the module UI
+                                                   
                                                    DT::dataTableOutput("selectedCells2") 
-                                   ))
-                        
-
-                    ),
+                                   ))),
                     mainPanel()
                 ))
 
 server <- function(input, output, session) {
     layout_raw <- reactive(make_layout("sample_daughter_layout.csv") )
-    
+ 
+    # selectVariablesTableServer returns a filtered layout tibble.    
+    # note that as selectVariablesTableServer() returns a reactive, new_layout and new_layout2 will be reactive. 
+ 
     new_layout <- selectVariablesTableServer(id = "selection_table1", 
                                              layout_raw = layout_raw) # why is unresolved (no () ) reactive required for layout_raw, which is reactive?
     
@@ -36,15 +40,14 @@ server <- function(input, output, session) {
                                               layout_raw = layout_raw) # why is unresolved (no () ) reactive required for layout_raw, which is reactive?
     
     output$selectedCells <- DT::renderDataTable(
-        new_layout(),
+        new_layout(), # is reactive, bc selectVariablesTableServer returns reactive value
         options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr')
         )
     
     output$selectedCells2 <- DT::renderDataTable(
-        new_layout2(),
+        new_layout2(), # is reactive, bc selectVariablesTableServer returns reactive value
         options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr')
     )
-    
 }
 
 shinyApp(ui, server)
